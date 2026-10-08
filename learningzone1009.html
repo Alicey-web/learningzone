@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>學習區紀錄表產生器</title>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f0f2f5;
+      display: flex;
+      gap: 20px;
+    }
+
+    /* 左側表單 */
+    .form-container {
+      width: 380px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
+    .form-group input[type="text"], 
+    .form-group textarea, 
+    .form-group input[type="file"] {
+      width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+    }
+    .form-group textarea { height: 70px; resize: vertical; }
+    .checkbox-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .checkbox-group label { font-weight: normal; font-size: 13px; cursor: pointer; }
+    
+    .photo-input-group {
+      background: #f8f9fa;
+      padding: 10px;
+      border: 1px dashed #ccc;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .section-divider { border-top: 2px solid #ddd; margin: 15px 0; }
+
+    .btn-action {
+      width: 100%; padding: 12px; color: white;
+      border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .btn-print { background: #007bff; }
+    .btn-print:hover { background: #0056b3; }
+    .btn-word { background: #28a745; }
+    .btn-word:hover { background: #1e7e34; }
+
+    /* 右側預覽 A4 頁面 */
+    .preview-container {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow-y: auto;
+    }
+    .a4-page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 12mm 15mm;
+      background: white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      position: relative;
+      color: #000;
+    }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+    .header-info-box { font-size: 16px; font-weight: bold; }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin: 10px 0 6px 0;
+      display: flex;
+      align-items: center;
+    }
+    .section-title::before { content: "●"; margin-right: 6px; font-size: 14px; }
+
+    .section-header-flex {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin: 10px 0 6px 0;
+    }
+    .section-header-flex .section-title { margin: 0; }
+    .date-display { font-size: 14px; font-weight: bold; }
+
+    /* 學習區 6 格網格 */
+    .zones-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      border: 1.5px solid #000;
+      text-align: center;
+      margin-bottom: 10px;
+      height: 24mm;
+    }
+    .zone-item {
+      border-right: 1px solid #000;
+      padding: 4px 2px;
+      font-size: 13px;
+      font-weight: bold;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .zone-item:last-child { border-right: none; }
+    .zone-icon { font-size: 22px; margin-bottom: 2px; }
+    
+    .selected-mark {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 46px; height: 46px;
+      border: 3px solid red;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    /* 歷程區 */
+    .top-process-container { border: 1.5px solid #000; margin-bottom: 10px; }
+    .top-photos-row { display: flex; gap: 8px; padding: 6px; border-bottom: 1.5px solid #000; height: 48mm; }
+    .top-photo-item { flex: 1; height: 100%; display: flex; justify-content: center; align-items: center; background-color: #fafafa; overflow: hidden; }
+    .top-photo-item img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .top-text-box { padding: 8px 10px; min-height: 20mm; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+
+    /* 操作照片區 */
+    .bottom-photos-container { border: 1.5px solid #000; margin-bottom: 10px; }
+    .bottom-photos-grid { display: flex; }
+    .bottom-photo-col { flex: 1; display: flex; flex-direction: column; }
+    .bottom-photo-col:first-child { border-right: 1.5px solid #000; }
+    .bottom-photo-box { height: 48mm; display: flex; justify-content: center; align-items: center; border-bottom: 1.5px solid #000; background-color: #fafafa; overflow: hidden; }
+    .bottom-photo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .bottom-caption-box { padding: 6px 8px; min-height: 10mm; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+
+    .rounded-box {
+      border: 1.5px solid #000;
+      border-radius: 12px;
+      padding: 10px;
+      min-height: 35mm;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .footer-row { text-align: right; font-size: 14px; font-weight: bold; margin-top: 12px; }
+
+    @media print {
+      body { background: white; padding: 0; }
+      .form-container { display: none; }
+      .preview-container { overflow: visible; }
+      .a4-page { box-shadow: none; padding: 0; width: 100%; height: 100%; }
+      @page { size: A4; margin: 12mm 15mm; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 左側控制面板 -->
+  <div class="form-container">
+    <h2 style="margin-top:0;">學習區紀錄表填寫</h2>
+    
+    <div class="form-group">
+      <label>標題名稱</label>
+      <input type="text" id="in-title" value="115 學年度第 1 學期 學習區紀錄表">
+    </div>
+
+    <!-- 拆分：班級、姓名、座號 -->
+    <div class="form-group" style="display: flex; gap: 8px;">
+      <div style="flex: 1;">
+        <label>班級</label>
+        <input type="text" id="in-class" placeholder="大熊班">
+      </div>
+      <div style="flex: 1;">
+        <label>姓名</label>
+        <input type="text" id="in-name" placeholder="張小明">
+      </div>
+      <div style="width: 70px;">
+        <label>座號</label>
+        <input type="text" id="in-seat" placeholder="01">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>我在（勾選自動圈選）：</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" class="in-zone" value="z1"> 語文區</label>
+        <label><input type="checkbox" class="in-zone" value="z2"> 美勞區</label>
+        <label><input type="checkbox" class="in-zone" value="z3"> 數學區</label>
+        <label><input type="checkbox" class="in-zone" value="z4"> 積木區</label>
+        <label><input type="checkbox" class="in-zone" value="z5"> 組合建構區</label>
+        <label><input type="checkbox" class="in-zone" value="z6"> 扮演區</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>日期</label>
+      <input type="text" id="in-date" value="115 年 10 月 8 日">
+    </div>
+
+    <div class="section-divider"></div>
+    <strong>【學習區歷程】</strong>
+
+    <div class="photo-input-group" style="margin-top: 8px;">
+      <label>📷 上方照片 1</label>
+      <input type="file" id="in-top-photo1" accept="image/*">
+    </div>
+    <div class="photo-input-group">
+      <label>📷 上方照片 2</label>
+      <input type="file" id="in-top-photo2" accept="image/*">
+    </div>
+    <div class="photo-input-group">
+      <label>📷 上方照片 3</label>
+      <input type="file" id="in-top-photo3" accept="image/*">
+    </div>
+
+    <div class="form-group">
+      <label>歷程文字內容</label>
+      <textarea id="in-process" placeholder="請輸入學習歷程敘述..."></textarea>
+    </div>
+
+    <div class="section-divider"></div>
+    <strong>【操作照片】</strong>
+
+    <div class="photo-input-group" style="margin-top: 8px;">
+      <label>📷 下方照片 1 (左)</label>
+      <input type="file" id="in-bot-photo1" accept="image/*">
+      <input type="text" id="in-bot-cap1" placeholder="左照片說明..." style="margin-top: 5px;">
+    </div>
+
+    <div class="photo-input-group">
+      <label>📷 下方照片 2 (右)</label>
+      <input type="file" id="in-bot-photo2" accept="image/*">
+      <input type="text" id="in-bot-cap2" placeholder="右照片說明..." style="margin-top: 5px;">
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="form-group">
+      <label>老師觀察紀錄</label>
+      <textarea id="in-observe" placeholder="請輸入老師觀察紀錄..."></textarea>
+    </div>
+
+    <button class="btn-action btn-print" onclick="window.print()">📄 列印 / 存為 PDF</button>
+    <button class="btn-action btn-word" onclick="exportToWord()">📝 下載 Word 檔 (.docx)</button>
+  </div>
+
+  <!-- 右側即時預覽頁面 -->
+  <div class="preview-container">
+    <div class="a4-page" id="printable-area">
+      <div class="header-row">
+        <span id="out-title">115 學年度第 1 學期 學習區紀錄表</span>
+        <div class="header-info-box">
+          <span id="out-class"></span> 班 &nbsp;
+          姓名: <span id="out-name"></span> &nbsp;
+          座號: <span id="out-seat"></span>
+        </div>
+      </div>
+
+      <div class="section-title">我在：</div>
+      <div class="zones-grid">
+        <div class="zone-item"><span class="zone-icon">📖</span>語文區<div class="selected-mark" id="m-z1" style="display:none;"></div></div>
+        <div class="zone-item"><span class="zone-icon">🎨</span>美勞區<div class="selected-mark" id="m-z2" style="display:none;"></div></div>
+        <div class="zone-item"><span class="zone-icon">🔢</span>數學區<div class="selected-mark" id="m-z3" style="display:none;"></div></div>
+        <div class="zone-item"><span class="zone-icon">🧱</span>積木區<div class="selected-mark" id="m-z4" style="display:none;"></div></div>
+        <div class="zone-item"><span class="zone-icon">🧩</span>組合建構區<div class="selected-mark" id="m-z5" style="display:none;"></div></div>
+        <div class="zone-item"><span class="zone-icon">🎭</span>扮演區<div class="selected-mark" id="m-z6" style="display:none;"></div></div>
+      </div>
+
+      <div class="section-header-flex">
+        <div class="section-title">我的學習區歷程</div>
+        <div class="date-display">日期：<span id="out-date">115 年 10 月 8 日</span></div>
+      </div>
+      
+      <div class="top-process-container">
+        <div class="top-photos-row">
+          <div class="top-photo-item"><img id="out-top-photo1" style="display:none;"></div>
+          <div class="top-photo-item"><img id="out-top-photo2" style="display:none;"></div>
+          <div class="top-photo-item"><img id="out-top-photo3" style="display:none;"></div>
+        </div>
+        <div class="top-text-box" id="out-process"></div>
+      </div>
+
+      <div class="section-title">操作照片</div>
+      <div class="bottom-photos-container">
+        <div class="bottom-photos-grid">
+          <div class="bottom-photo-col">
+            <div class="bottom-photo-box"><img id="out-bot-photo1" style="display:none;"></div>
+            <div class="bottom-caption-box" id="out-bot-cap1"></div>
+          </div>
+          <div class="bottom-photo-col">
+            <div class="bottom-photo-box"><img id="out-bot-photo2" style="display:none;"></div>
+            <div class="bottom-caption-box" id="out-bot-cap2"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">老師觀察紀錄</div>
+      <div class="rounded-box" id="out-observe"></div>
+
+      <div class="footer-row">家長簽名：___________</div>
+    </div>
+  </div>
+
+  <script>
+    // 即時雙向綁定 (Input/Keyup/Change)
+    const bindSync = (inputId, outputId) => {
+      const inputEl = document.getElementById(inputId);
+      const outputEl = document.getElementById(outputId);
+      if (inputEl && outputEl) {
+        const update = () => { outputEl.innerText = inputEl.value; };
+        inputEl.addEventListener('input', update);
+        inputEl.addEventListener('change', update);
+        update(); // 初始化一次
+      }
+    };
+
+    bindSync('in-title', 'out-title');
+    bindSync('in-class', 'out-class');
+    bindSync('in-name', 'out-name');
+    bindSync('in-seat', 'out-seat');
+    bindSync('in-date', 'out-date');
+    bindSync('in-process', 'out-process');
+    bindSync('in-observe', 'out-observe');
+    bindSync('in-bot-cap1', 'out-bot-cap1');
+    bindSync('in-bot-cap2', 'out-bot-cap2');
+
+    const selectedZones = new Set();
+    document.querySelectorAll('.in-zone').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const mark = document.getElementById('m-' + e.target.value);
+        if (mark) {
+          mark.style.display = e.target.checked ? 'block' : 'none';
+        }
+        if (e.target.checked) {
+          selectedZones.add(e.target.value);
+        } else {
+          selectedZones.delete(e.target.value);
+        }
+      });
+    });
+
+    // 儲存照片 Data & 寬高比資訊
+    const photoDataMap = {};
+
+    const bindPhotoSync = (inputId, imgId) => {
+      const inputEl = document.getElementById(inputId);
+      const imgEl = document.getElementById(imgId);
+
+      inputEl.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            imgEl.src = evt.target.result;
+            imgEl.style.display = 'block';
+
+            const tempImg = new Image();
+            tempImg.src = evt.target.result;
+            tempImg.onload = () => {
+              photoDataMap[imgId] = {
+                dataUrl: evt.target.result,
+                width: tempImg.width,
+                height: tempImg.height,
+                aspectRatio: tempImg.width / tempImg.height
+              };
+            };
+          };
+          reader.readAsDataURL(file);
+        } else {
+          imgEl.src = '';
+          imgEl.style.display = 'none';
+          delete photoDataMap[imgId];
+        }
+      });
+    };
+
+    bindPhotoSync('in-top-photo1', 'out-top-photo1');
+    bindPhotoSync('in-top-photo2', 'out-top-photo2');
+    bindPhotoSync('in-top-photo3', 'out-top-photo3');
+    bindPhotoSync('in-bot-photo1', 'out-bot-photo1');
+    bindPhotoSync('in-bot-photo2', 'out-bot-photo2');
+
+    function dataURLtoArrayBuffer(dataurl) {
+      if (!dataurl || !dataurl.includes(',')) return null;
+      try {
+        const arr = dataurl.split(',');
+        const binaryString = window.atob(arr[1]);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    // 生成高清晰度「學習區文字+紅圈」寫入 Word
+    function generateZoneCellImage(nameText, isSelected) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 300;
+        canvas.height = 150;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#000000";
+        ctx.font = "bold 36px 'Microsoft JhengHei', 'PingFang TC', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(nameText, 150, 75);
+
+        if (isSelected) {
+          ctx.strokeStyle = "#ff0000";
+          ctx.lineWidth = 8;
+          ctx.beginPath();
+          ctx.arc(150, 75, 62, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+
+        resolve(dataURLtoArrayBuffer(canvas.toDataURL('image/png')));
+      });
+    }
+
+    // 匯出Word (.docx)
+    async function exportToWord() {
+      const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, ImageRun, BorderStyle } = docx;
+
+      const title = document.getElementById('out-title').innerText || '學習區紀錄表';
+      const className = document.getElementById('out-class').innerText || '';
+      const name = document.getElementById('out-name').innerText || '';
+      const seat = document.getElementById('out-seat').innerText || '';
+      const dateStr = document.getElementById('out-date').innerText || '';
+      const processText = document.getElementById('out-process').innerText || '';
+      const observeText = document.getElementById('out-observe').innerText || '';
+      const cap1 = document.getElementById('out-bot-cap1').innerText || '';
+      const cap2 = document.getElementById('out-bot-cap2').innerText || '';
+
+      const getImgObject = (id, targetWidthPx, targetMaxHeightPx) => {
+        const pData = photoDataMap[id];
+        if (pData) {
+          const buffer = dataURLtoArrayBuffer(pData.dataUrl);
+          if (!buffer) return null;
+
+          let finalW = targetWidthPx;
+          let finalH = Math.round(targetWidthPx / pData.aspectRatio);
+
+          if (finalH > targetMaxHeightPx) {
+            finalH = targetMaxHeightPx;
+            finalW = Math.round(targetMaxHeightPx * pData.aspectRatio);
+          }
+
+          return { buffer, width: finalW, height: finalH };
+        }
+        return null;
+      };
+
+      const p1Obj = getImgObject('out-top-photo1', 170, 130);
+      const p2Obj = getImgObject('out-top-photo2', 170, 130);
+      const p3Obj = getImgObject('out-top-photo3', 170, 130);
+      const bp1Obj = getImgObject('out-bot-photo1', 260, 160);
+      const bp2Obj = getImgObject('out-bot-photo2', 260, 160);
+
+      const createImgCell = (imgObj, cellWidth) => {
+        const children = [];
+        if (imgObj) {
+          children.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [ new ImageRun({ data: imgObj.buffer, transformation: { width: imgObj.width, height: imgObj.height } }) ]
+          }));
+        } else {
+          children.push(new Paragraph(""));
+        }
+        return new TableCell({
+          width: { size: cellWidth, type: WidthType.DXA },
+          children: children,
+          verticalAlign: docx.VerticalAlign.CENTER
+        });
+      };
+
+      const zones = [
+        { key: 'z1', name: '語文區' },
+        { key: 'z2', name: '美勞區' },
+        { key: 'z3', name: '數學區' },
+        { key: 'z4', name: '積木區' },
+        { key: 'z5', name: '組合建構區' },
+        { key: 'z6', name: '扮演區' }
+      ];
+
+      const zoneCells = [];
+      for (const z of zones) {
+        const isChecked = selectedZones.has(z.key);
+        const imgBuf = await generateZoneCellImage(z.name, isChecked);
+        
+        zoneCells.push(
+          new TableCell({
+            width: { size: 1500, type: WidthType.DXA },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new ImageRun({
+                    data: imgBuf,
+                    transformation: { width: 75, height: 38 }
+                  })
+                ]
+              })
+            ]
+          })
+        );
+      }
+
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } }
+          },
+          children: [
+            new Table({
+              width: { size: 9000, type: WidthType.DXA },
+              borders: {
+                top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+                insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE },
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      width: { size: 4800, type: WidthType.DXA },
+                      children: [new Paragraph({ children: [new TextRun({ text: title, bold: true, size: 28 })] })]
+                    }),
+                    new TableCell({
+                      width: { size: 4200, type: WidthType.DXA },
+                      children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${className} 班  姓名: ${name}  座號: ${seat}`, bold: true, size: 22 })] })]
+                    })
+                  ]
+                })
+              ]
+            }),
+
+            new Paragraph({ text: "" }),
+            new Paragraph({ children: [new TextRun({ text: "● 我在：", bold: true, size: 24 })] }),
+            new Table({
+              width: { size: 9000, type: WidthType.DXA },
+              rows: [new TableRow({ children: zoneCells })]
+            }),
+
+            new Paragraph({ text: "" }),
+            new Table({
+              width: { size: 9000, type: WidthType.DXA },
+              borders: {
+                top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE },
+                insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE },
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      width: { size: 5000, type: WidthType.DXA },
+                      children: [new Paragraph({ children: [new TextRun({ text: "● 我的學習區歷程", bold: true, size: 24 })] })]
+                    }),
+                    new TableCell({
+                      width: { size: 4000, type: WidthType.DXA },
+                      children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `日期：${dateStr}`, bold: true, size: 20 })] })]
+                    })
+                  ]
+                })
+              ]
+            }),
+
+            new Table({
+              width: { size: 9000, type: WidthType.DXA },
+              rows: [
+                new TableRow({
+                  children: [
+                    createImgCell(p1Obj, 3000),
+                    createImgCell(p2Obj, 3000),
+                    createImgCell(p3Obj, 3000),
+                  ]
+                }),
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      columnSpan: 3,
+                      width: { size: 9000, type: WidthType.DXA },
+                      children: (processText || " ").split('\n').map(line => new Paragraph({ children: [new TextRun({ text: line, size: 22 })] }))
+                    })
+                  ]
+                })
+              ]
+            }),
+
+            new Paragraph({ text: "" }),
+            new Paragraph({ children: [new TextRun({ text: "● 操作照片", bold: true, size: 24 })] }),
+            
+            new Table({
+              width: { size: 9000, type: WidthType.DXA },
+              rows: [
+                new TableRow({
+                  children: [
+                    createImgCell(bp1Obj, 4500),
+                    createImgCell(bp2Obj, 4500),
+                  ]
+                }),
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      width: { size: 4500, type: WidthType.DXA },
+                      children: (cap1 || " ").split('\n').map(line => new Paragraph({ children: [new TextRun({ text: line, size: 20 })] }))
+                    }),
+                    new TableCell({
+                      width: { size: 4500, type: WidthType.DXA },
+                      children: (cap2 || " ").split('\n').map(line => new Paragraph({ children: [new TextRun({ text: line, size: 20 })] }))
+                    })
+                  ]
+                })
+              ]
+            }),
+
+            new Paragraph({ text: "" }),
+            new Paragraph({ children: [new TextRun({ text: "● 老師觀察紀錄", bold: true, size: 24 })] }),
+            
+            new Table({
+              width: { size: 9000, type: WidthType.DXA },
+              rows: [
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      width: { size: 9000, type: WidthType.DXA },
+                      children: (observeText || " ").split('\n').map(line => new Paragraph({ children: [new TextRun({ text: line, size: 22 })] }))
+                    })
+                  ]
+                })
+              ]
+            }),
+
+            new Paragraph({ text: "" }),
+            new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: "家長簽名：___________", bold: true, size: 22 })] })
+          ]
+        }]
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
